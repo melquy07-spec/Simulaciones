@@ -71,12 +71,42 @@ td.nombre { font-family: Grotesk, sans-serif; }
 .pie { margin-top: 34px; font-size: 14px; color: var(--tenue); }
 [hidden] { display: none !important; }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+
+html[data-tema="claro"] {
+  --fondo: #FFFFFF; --panel: #F1F3F2; --realce: #E3E9E7;
+  --tiza: #14202A; --texto: #14202A; --tenue: #4A5760;
+  --linea: #CBD3D5; --borde: #A6B2B6; --error: #A8341A;
+}
+html[data-tema="claro"] .grupo button[aria-pressed="true"] { color: #FFFFFF; }
+html[data-tema="claro"] input[type=range]::-webkit-slider-runnable-track { background: #C3CCCE; }
+html[data-tema="claro"] input[type=range]::-moz-range-track { background: #C3CCCE; }
+html[data-tema="claro"] input[type=range]:focus-visible { outline-color: #14202A; }
+html[data-tema="claro"] button:focus-visible { outline-color: #14202A; }
+
+.barra { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 28px; }
+
+html[data-proy="si"] body { font-size: 18px; }
+html[data-proy="si"] h1 { font-size: clamp(30px, 7.5vw, 42px); }
+html[data-proy="si"] h2 { font-size: 17px; }
+html[data-proy="si"] button { font-size: 16px; padding: 11px 19px; }
+html[data-proy="si"] table { font-size: 18px; }
+html[data-proy="si"] th { font-size: 15px; }
+html[data-proy="si"] textarea, html[data-proy="si"] input[type=text] { font-size: 18px; }
+html[data-proy="si"] .nota, html[data-proy="si"] .cuenta, html[data-proy="si"] label.campo { font-size: 15px; }
+html[data-proy="si"] .celda .nombre { font-size: 15px; }
+html[data-proy="si"] .celda .valor { font-size: 21px; }
+html[data-proy="si"] .dato dd { font-size: 21px; }
 </style>
 </head>
 <body>
 <main class="hoja">
   <p class="rotulo">Estadística</p>
   <h1>Caja y bigote</h1>
+  <div class="barra">
+    <button id="modo-tema">Tema oscuro</button>
+    <button id="modo-proy">Texto normal</button>
+    <button id="pantalla" hidden>Pantalla completa</button>
+  </div>
 
   <h2 id="rotulo-datos">Datos numéricos, hasta 50 por grupo</h2>
   <textarea id="datos" spellcheck="false" aria-label="Datos de la muestra"></textarea>
@@ -105,7 +135,6 @@ td.nombre { font-family: Grotesk, sans-serif; }
   <div class="fila">
     <button id="modo-bigote">Bigotes hasta 1,5 · RIC</button>
     <button id="modo-media">Media visible</button>
-    <button id="modo-tema">Fondo oscuro</button>
   </div>
 
   <div class="marco">
@@ -147,9 +176,54 @@ td.nombre { font-family: Grotesk, sans-serif; }
 
 <script>
 (function () {
-  var COLORES = ['#FFB84D', '#58D0E8', '#FF7DA6', '#8FD98F'];
+  var COLORES_OSC = ['#FFB84D', '#58D0E8', '#FF7DA6', '#8FD98F'];
+  var COLORES_CLA = ['#B45309', '#0E6E8C', '#B5246B', '#2F7D4F'];
   var LIMITE = 50, MAXGRUPOS = 4, MINIMO = 4;
-  var metodo = 'tukey', decimalComa = true, temaClaro = false, bigoteRIC = true, verMedia = true;
+  var metodo = 'tukey', decimalComa = true, bigoteRIC = true, verMedia = true;
+  var temaClaro = false, proyeccion = false, escala = 1;
+
+  function recordar(clave, valor) {
+    try { localStorage.setItem(clave, valor); } catch (e) {}
+  }
+  function recordado(clave) {
+    try { return localStorage.getItem(clave); } catch (e) { return null; }
+  }
+
+  function aplicarTema() {
+    document.documentElement.setAttribute('data-tema', temaClaro ? 'claro' : 'oscuro');
+    document.getElementById('modo-tema').textContent = temaClaro ? 'Tema claro' : 'Tema oscuro';
+    recordar('tema', temaClaro ? 'claro' : 'oscuro');
+  }
+  function aplicarProyeccion() {
+    escala = proyeccion ? 1.28 : 1;
+    document.documentElement.setAttribute('data-proy', proyeccion ? 'si' : 'no');
+    document.getElementById('modo-proy').textContent = proyeccion ? 'Texto grande' : 'Texto normal';
+    recordar('proyeccion', proyeccion ? 'si' : 'no');
+  }
+  function conectarBarra(alCambiar) {
+    document.getElementById('modo-tema').addEventListener('click', function () {
+      temaClaro = !temaClaro; aplicarTema(); alCambiar();
+    });
+    document.getElementById('modo-proy').addEventListener('click', function () {
+      proyeccion = !proyeccion; aplicarProyeccion(); alCambiar();
+    });
+    var bp = document.getElementById('pantalla');
+    if (document.documentElement.requestFullscreen) {
+      bp.hidden = false;
+      bp.addEventListener('click', function () {
+        if (document.fullscreenElement) { document.exitFullscreen(); }
+        else { document.documentElement.requestFullscreen().catch(function () {}); }
+      });
+      document.addEventListener('fullscreenchange', function () {
+        bp.textContent = document.fullscreenElement ? 'Salir de pantalla completa' : 'Pantalla completa';
+        setTimeout(alCambiar, 120);
+      });
+    }
+    temaClaro = recordado('tema') === 'claro';
+    proyeccion = recordado('proyeccion') === 'si';
+    aplicarTema(); aplicarProyeccion();
+  }
+
   var lienzo = document.getElementById('grafico');
   var ctx = lienzo.getContext('2d');
   var eDatos = document.getElementById('datos');
@@ -293,7 +367,8 @@ td.nombre { font-family: Grotesk, sans-serif; }
       total += r.nums.length;
     }
 
-    grupos = partes.map(function (p, j) { return resumir(p.nombre, p.nums, COLORES[j % COLORES.length]); });
+    var colores = temaClaro ? COLORES_CLA : COLORES_OSC;
+    grupos = partes.map(function (p, j) { return resumir(p.nombre, p.nums, colores[j % colores.length]); });
     cuenta.textContent = grupos.length === 1
       ? total + ' datos'
       : grupos.length + ' grupos, ' + total + ' datos';
@@ -301,7 +376,7 @@ td.nombre { font-family: Grotesk, sans-serif; }
 
   function paleta() {
     return temaClaro
-      ? { fondo: '#FFFFFF', texto: '#1B2A33', tenue: '#5C6B73', eje: '#B7C0C4', grilla: '#E6EAEC' }
+      ? { fondo: '#FFFFFF', texto: '#14202A', tenue: '#41505A', eje: '#7E8C93', grilla: '#D6DEE0' }
       : { fondo: '#171D23', texto: '#F1EEE5', tenue: '#9AA3AA', eje: '#4A555E', grilla: '#242C34' };
   }
 
@@ -314,6 +389,7 @@ td.nombre { font-family: Grotesk, sans-serif; }
   }
 
   function pintar(cx, W, H, s) {
+    s = s * escala;
     var p = paleta();
     cx.fillStyle = p.fondo;
     cx.fillRect(0, 0, W, H);
@@ -444,7 +520,7 @@ td.nombre { font-family: Grotesk, sans-serif; }
   function medirYPintar() {
     var w = lienzo.parentNode.clientWidth - 12;
     var filas = Math.max(1, grupos.length);
-    var h = Math.max(230, Math.min(520, 96 + filas * (filas === 1 ? 140 : 82)));
+    var h = Math.round(Math.max(230, Math.min(520, 96 + filas * (filas === 1 ? 140 : 82))) * escala);
     var dpr = window.devicePixelRatio || 1;
     lienzo.width = Math.round(w * dpr);
     lienzo.height = Math.round(h * dpr);
@@ -566,14 +642,10 @@ td.nombre { font-family: Grotesk, sans-serif; }
     this.textContent = verMedia ? 'Media visible' : 'Media oculta';
     medirYPintar();
   });
-  document.getElementById('modo-tema').addEventListener('click', function () {
-    temaClaro = !temaClaro;
-    this.textContent = temaClaro ? 'Fondo claro' : 'Fondo oscuro';
-    medirYPintar();
-  });
   document.getElementById('png').addEventListener('click', function () { bajar('image/png', 'png'); });
   document.getElementById('jpg').addEventListener('click', function () { bajar('image/jpeg', 'jpg'); });
 
+  conectarBarra(actualizar);
   window.addEventListener('resize', medirYPintar);
   cargar(true);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(medirYPintar);
