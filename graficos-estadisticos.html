@@ -119,6 +119,15 @@ select {
 select:focus-visible { outline: 2px solid var(--tiza); outline-offset: 2px; }
 html[data-proy="si"] select { font-size: 17px; }
 
+.campos { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 16px; }
+.campo-chico { display: flex; flex-direction: column; gap: 6px; }
+.campo-chico > span { font-size: 13px; color: var(--tenue); }
+.campo-chico select { width: 10em; }
+.campo-chico input[type=text] {
+  width: 10em; text-align: center; border-radius: 999px; padding: 10px 12px;
+}
+html[data-proy="si"] .campo-chico > span { font-size: 15px; }
+
 html[data-proy="si"] body { font-size: 18px; }
 html[data-proy="si"] h1 { font-size: clamp(30px, 7.5vw, 42px); }
 html[data-proy="si"] h2 { font-size: 17px; }
@@ -149,24 +158,46 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
     <button id="t-categorica" aria-pressed="false">Categórica</button>
   </div>
 
-  <h2 id="rotulo-datos">Datos numéricos, hasta 30</h2>
+  <h2 id="rotulo-datos">Datos numéricos, hasta 50</h2>
   <textarea id="datos" spellcheck="false" aria-label="Datos de la muestra"></textarea>
-  <label class="campo" for="contexto" style="margin-top:14px">Contexto del ejemplo</label>
-  <select id="contexto"></select>
   <div class="fila">
     <span class="cuenta" id="cuenta">0 datos</span>
-    <button id="ejemplo">Nueva muestra</button>
     <button id="limpiar">Limpiar</button>
-    <button id="separador">Decimal: coma</button>
   </div>
   <p class="error" id="error" hidden></p>
 
+  <h2>Generar una muestra</h2>
+  <label class="campo" for="contexto">Contexto</label>
+  <select id="contexto"></select>
+  <div class="campos">
+    <label class="campo-chico"><span>Cantidad de datos</span>
+      <select id="cantidad"></select></label>
+    <label class="campo-chico" id="caja-desde"><span>Valor mínimo</span>
+      <input type="text" id="desde" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="auto"></label>
+    <label class="campo-chico" id="caja-hasta"><span>Valor máximo</span>
+      <input type="text" id="hasta" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="auto"></label>
+  </div>
+  <div class="fila">
+    <button id="ejemplo">Nueva muestra</button>
+  </div>
+
   <div id="bloque-clases">
-    <h2>Cantidad de clases</h2>
+    <h2>Clases</h2>
     <div class="grupo" id="grupo-clases" role="group">
       <button class="op-clases" data-k="4" aria-pressed="false">4</button>
       <button class="op-clases" data-k="6" aria-pressed="true">6</button>
       <button class="op-clases" data-k="8" aria-pressed="false">8</button>
+    </div>
+    <div class="fila">
+      <button id="fijar-clases">Fijar estas clases</button>
+    </div>
+    <div class="campos" id="campos-fijas" hidden>
+      <label class="campo-chico"><span>Primer límite</span>
+        <input type="text" id="fijo-inicio" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+      <label class="campo-chico"><span>Ancho de clase</span>
+        <input type="text" id="fijo-ancho" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+      <label class="campo-chico"><span>Cantidad de clases</span>
+        <input type="text" id="fijo-cantidad" inputmode="numeric" autocomplete="off" spellcheck="false"></label>
     </div>
     <p class="nota" id="nota-clases"></p>
   </div>
@@ -211,7 +242,8 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
   var COLORES_OSC = { continua: '#FFB84D', discreta: '#58D0E8', categorica: '#FF7DA6' };
   var COLORES_CLA = { continua: '#B45309', discreta: '#0E6E8C', categorica: '#B5246B' };
   var LIMITE = 50;
-  var tipo = 'continua', decimalComa = true, relativa = false, vista = 'barras';
+  var tipo = 'continua', relativa = false, vista = 'barras';
+  var decimalComa = true;
   var temaClaro = false, proyeccion = false, escala = 1;
 
   function recordar(clave, valor) {
@@ -260,6 +292,7 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
   var ctx = lienzo.getContext('2d');
   var eDatos = document.getElementById('datos');
   var clasesObjetivo = 6;
+  var clasesFijas = false;
   var estado = null;
 
   function marcaColor() { return (temaClaro ? COLORES_CLA : COLORES_OSC)[tipo]; }
@@ -381,9 +414,32 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
       return;
     }
 
-    var ancho = anchoParaClases(min, max, clasesObjetivo);
-    var arranque = Math.round(Math.floor(min / ancho) * ancho * 100) / 100;
-    var clases = Math.max(1, Math.ceil((max - arranque) / ancho - 1e-9));
+    var ancho, arranque, clases, desborde = false;
+    if (clasesFijas) {
+      ancho = leerNum(document.getElementById('fijo-ancho').value);
+      arranque = leerNum(document.getElementById('fijo-inicio').value);
+      var cant = Math.round(leerNum(document.getElementById('fijo-cantidad').value));
+      if (!ancho || ancho <= 0 || arranque === null || !cant || cant < 1) {
+        err.textContent = 'Completá primer límite, ancho mayor que cero y cantidad de clases.';
+        err.hidden = false; estado = null; return;
+      }
+      var inicio = arranque;
+      if (min < inicio - 1e-9) {
+        inicio = arranque - Math.ceil((arranque - min) / ancho) * ancho;
+        desborde = true;
+      }
+      clases = cant + Math.round((arranque - inicio) / ancho);
+      if (max > inicio + clases * ancho + 1e-9) {
+        clases = Math.ceil((max - inicio) / ancho - 1e-9);
+        desborde = true;
+      }
+      arranque = Math.round(inicio * 1000) / 1000;
+    } else {
+      ancho = anchoParaClases(min, max, clasesObjetivo);
+      arranque = Math.round(Math.floor(min / ancho) * ancho * 100) / 100;
+      clases = Math.max(1, Math.ceil((max - arranque) / ancho - 1e-9));
+    }
+    clases = Math.max(1, clases);
     var bordes = [], i;
     for (i = 0; i <= clases; i++) bordes.push(Math.round((arranque + ancho * i) * 100) / 100);
     var frec = new Array(clases).fill(0);
@@ -397,7 +453,7 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
     for (i = 0; i < clases; i++) {
       rot.push('[' + fmt(bordes[i], 2) + ' ; ' + fmt(bordes[i + 1], 2) + (i === clases - 1 ? ']' : ')'));
     }
-    estado = { rotulos: rot, frec: frec, bordes: bordes, ancho: ancho, n: n, datos: datos, continua: true, numerico: true };
+    estado = { rotulos: rot, frec: frec, bordes: bordes, ancho: ancho, n: n, datos: datos, continua: true, numerico: true, desborde: desborde };
   }
 
   function paleta() {
@@ -633,8 +689,16 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
     var nota = document.getElementById('nota-clases');
     if (tipo !== 'continua') { nota.textContent = 'Se aplica solo a variables continuas.'; return; }
     if (!estado || !estado.continua) { nota.textContent = ''; return; }
-    nota.textContent = 'Resultado: ' + estado.frec.length + ' clases de ancho ' + fmt(estado.ancho, 2) +
-      ', de ' + fmt(estado.bordes[0], 2) + ' a ' + fmt(estado.bordes[estado.bordes.length - 1], 2) + '.';
+    var txt = 'Resultado: ' + estado.frec.length + ' clases de ancho ' + fmt(estado.ancho, 3) +
+      ', de ' + fmt(estado.bordes[0], 3) + ' a ' + fmt(estado.bordes[estado.bordes.length - 1], 3) + '.';
+    if (clasesFijas) {
+      txt += ' Las clases están fijas: toda muestra se vuelca sobre esta misma grilla.';
+      if (estado.desborde) {
+        txt += ' Esta muestra se sale de la grilla, así que se agregaron clases para no perder datos: el eje no coincide con el de las otras.';
+      }
+      if (estado.frec.length > 12) txt += ' Salieron muchas clases; conviene agrandar el ancho.';
+    }
+    nota.textContent = txt;
   }
 
   function actualizar() {
@@ -669,21 +733,24 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
       document.getElementById('t-' + t).setAttribute('aria-pressed', String(t === nuevo));
     });
     var sinClases = (nuevo !== 'continua');
-    Array.prototype.forEach.call(document.querySelectorAll('.op-clases'), function (o) { o.disabled = sinClases; });
+    if (sinClases) clasesFijas = false;
+    document.getElementById('fijar-clases').disabled = sinClases;
     document.getElementById('bloque-clases').style.opacity = sinClases ? '0.45' : '1';
+    reflejarModoClases();
     var esCat = (nuevo === 'categorica');
     var bv = document.getElementById('modo-vista');
     bv.disabled = esCat;
     bv.style.opacity = esCat ? '0.45' : '1';
     bv.title = esCat ? 'El polígono no se aplica a variables categóricas' : '';
     if (esCat) { vista = 'barras'; bv.textContent = NOMBRES.barras; }
-    document.getElementById('separador').hidden = (nuevo === 'categorica');
     document.getElementById('th-clase').textContent = nuevo === 'continua' ? 'Clase' : (nuevo === 'discreta' ? 'Valor' : 'Categoría');
     document.getElementById('rotulo-datos').textContent = nuevo === 'categorica'
       ? 'Categorías separadas por coma, hasta ' + LIMITE
       : 'Datos numéricos, hasta ' + LIMITE;
     eDatos.placeholder = nuevo === 'categorica' ? 'camión, moto, camión, utilitario' : '12  15  9  22  17';
     llenarContextos();
+    reflejarRango();
+    mostrarRango();
     fijarMarca();
     actualizar();
   }
@@ -695,6 +762,35 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
   eDatos.addEventListener('input', actualizar);
   document.getElementById('titulo').addEventListener('input', medirYPintar);
   document.getElementById('ejex').addEventListener('input', medirYPintar);
+  function reflejarModoClases() {
+    var b = document.getElementById('fijar-clases');
+    b.textContent = clasesFijas ? 'Volver a clases automáticas' : 'Fijar estas clases';
+    b.classList.toggle('activo', clasesFijas);
+    document.getElementById('campos-fijas').hidden = !clasesFijas;
+    Array.prototype.forEach.call(document.querySelectorAll('.op-clases'), function (o) {
+      o.disabled = clasesFijas || tipo !== 'continua';
+    });
+    document.getElementById('grupo-clases').style.opacity = (clasesFijas || tipo !== 'continua') ? '0.45' : '1';
+  }
+
+  document.getElementById('fijar-clases').addEventListener('click', function () {
+    if (!clasesFijas) {
+      if (!estado || !estado.continua) return;
+      document.getElementById('fijo-inicio').value = fmt(estado.bordes[0], 3);
+      document.getElementById('fijo-ancho').value = fmt(estado.ancho, 3);
+      document.getElementById('fijo-cantidad').value = String(estado.frec.length);
+      clasesFijas = true;
+    } else {
+      clasesFijas = false;
+    }
+    reflejarModoClases();
+    actualizar();
+  });
+
+  ['fijo-inicio', 'fijo-ancho', 'fijo-cantidad'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', actualizar);
+  });
+
   Array.prototype.forEach.call(document.querySelectorAll('.op-clases'), function (b) {
     b.addEventListener('click', function () {
       clasesObjetivo = parseInt(b.getAttribute('data-k'), 10);
@@ -742,26 +838,67 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
   function campana() { return (Math.random() + Math.random() + Math.random()) / 3; }
   function elegir(lista) { return lista[entero(0, lista.length - 1)]; }
 
+  function leerNum(txt) {
+    var limpio = String(txt).trim().replace(/[−–—]/g, '-').replace(',', '.');
+    if (!limpio) return null;
+    var v = parseFloat(limpio);
+    return isFinite(v) ? v : null;
+  }
+
+  function cantidadElegida() {
+    var v = parseInt(document.getElementById('cantidad').value, 10);
+    return (isNaN(v) || v < 1) ? entero(15, LIMITE) : Math.min(LIMITE, v);
+  }
+
+  function grillaFija() {
+    if (!clasesFijas) return null;
+    var a = leerNum(document.getElementById('fijo-ancho').value);
+    var i0 = leerNum(document.getElementById('fijo-inicio').value);
+    var c = Math.round(leerNum(document.getElementById('fijo-cantidad').value));
+    if (!a || a <= 0 || i0 === null || !c || c < 1) return null;
+    return { inf: i0, sup: i0 + c * a };
+  }
+
+  function rangoElegido(minBase, maxBase) {
+    var lo = leerNum(document.getElementById('desde').value);
+    var hi = leerNum(document.getElementById('hasta').value);
+    if (lo === null) lo = minBase;
+    if (hi === null) hi = maxBase;
+    if (hi < lo) { var aux = lo; lo = hi; hi = aux; }
+    if (hi === lo) hi = lo + 1;
+    var g = grillaFija();
+    if (g) {
+      lo = Math.max(lo, g.inf);
+      hi = Math.min(hi, g.sup);
+      if (hi <= lo) { lo = g.inf; hi = g.sup; }
+    }
+    return { lo: lo, hi: hi };
+  }
+
   function generar(forzado) {
-    var n = entero(15, LIMITE);
+    var n = cantidadElegida();
     var lista = [], i;
+    var centro = azar(0.3, 0.7), disp = azar(0.5, 1);
+    function proporcion() {
+      return Math.max(0, Math.min(1, centro + (campana() - 0.5) * disp));
+    }
 
     if (tipo === 'continua') {
       var e = forzado || elegir(ESCENARIOS.continua);
-      var centro = azar(0.3, 0.7), disp = azar(0.5, 1);
+      var r = rangoElegido(e.min, e.max);
       for (i = 0; i < n; i++) {
-        var t = Math.max(0, Math.min(1, centro + (campana() - 0.5) * disp));
-        lista.push(redondear(e.min + t * (e.max - e.min), e.dec));
+        lista.push(redondear(r.lo + proporcion() * (r.hi - r.lo), e.dec));
       }
       return { texto: lista.map(function (v) { return fmt(v, e.dec); }).join('  '), eje: e.eje };
     }
 
     if (tipo === 'discreta') {
       var d = forzado || elegir(ESCENARIOS.discreta);
-      var sesgo = azar(0.2, 0.6);
+      var rd = rangoElegido(d.min === undefined ? 0 : d.min, d.max);
+      var lo = Math.round(rd.lo), hi = Math.round(rd.hi);
+      if (hi <= lo) hi = lo + 1;
       for (i = 0; i < n; i++) {
-        var v = Math.round(campana() * d.max * (0.6 + sesgo));
-        lista.push(Math.max(0, Math.min(d.max, v)));
+        lista.push(lo + Math.round(proporcion() * (hi - lo)));
       }
       return { texto: lista.join('  '), eje: d.eje };
     }
@@ -794,6 +931,35 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
     sel.value = '-1';
   }
 
+  function llenarCantidades() {
+    var sel = document.getElementById('cantidad');
+    sel.innerHTML = '';
+    var azarOp = document.createElement('option');
+    azarOp.value = '-1'; azarOp.textContent = 'Al azar';
+    sel.appendChild(azarOp);
+    [10, 15, 20, 25, 30, 40, 50].forEach(function (v) {
+      if (v > LIMITE) return;
+      var o = document.createElement('option');
+      o.value = String(v); o.textContent = String(v);
+      sel.appendChild(o);
+    });
+    sel.value = '-1';
+  }
+
+  function reflejarRango() {
+    var e = escenarioElegido();
+    var d = document.getElementById('desde'), h = document.getElementById('hasta');
+    if (!e || tipo === 'categorica') { d.value = ''; h.value = ''; return; }
+    var lo = (e.min === undefined ? 0 : e.min), hi = e.max;
+    d.value = fmt(lo, 2); h.value = fmt(hi, 2);
+  }
+
+  function mostrarRango() {
+    var oculto = (tipo === 'categorica');
+    document.getElementById('caja-desde').hidden = oculto;
+    document.getElementById('caja-hasta').hidden = oculto;
+  }
+
   function escenarioElegido() {
     var i = parseInt(document.getElementById('contexto').value, 10);
     return (isNaN(i) || i < 0) ? null : ESCENARIOS[tipo][i];
@@ -801,10 +967,6 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
 
   function cargarEjemplo() {
     var r = generar(escenarioElegido());
-    if (tipo !== 'categorica') {
-      decimalComa = true;
-      document.getElementById('separador').textContent = 'Decimal: coma';
-    }
     eDatos.value = r.texto;
     document.getElementById('ejex').value = r.eje;
   }
@@ -815,16 +977,24 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
   });
 
   document.getElementById('contexto').addEventListener('change', function () {
+    reflejarRango();
     cargarEjemplo();
     actualizar();
   });
+
+  document.getElementById('cantidad').addEventListener('change', function () {
+    cargarEjemplo();
+    actualizar();
+  });
+
+  ['desde', 'hasta'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', function () {
+      cargarEjemplo();
+      actualizar();
+    });
+  });
   document.getElementById('limpiar').addEventListener('click', function () {
     eDatos.value = ''; actualizar(); eDatos.focus();
-  });
-  document.getElementById('separador').addEventListener('click', function () {
-    decimalComa = !decimalComa;
-    this.textContent = decimalComa ? 'Decimal: coma' : 'Decimal: punto';
-    actualizar();
   });
   document.getElementById('modo-frec').addEventListener('click', function () {
     relativa = !relativa;
@@ -847,6 +1017,8 @@ html[data-proy="si"] .dato dd { font-size: 21px; }
   conectarBarra(actualizar);
   window.addEventListener('resize', medirYPintar);
   llenarContextos();
+  llenarCantidades();
+  mostrarRango();
   cargarEjemplo();
   elegirTipo('continua');
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(medirYPintar);
