@@ -102,6 +102,32 @@ html[data-proy="si"] .ecuacion, html[data-proy="si"] .terna { font-size: 20px; }
 html[data-proy="si"] .objeto input { font-size: 20px; }
 html[data-proy="si"] .celda .valor { font-size: 19px; }
 html[data-proy="si"] .forma .v { font-size: 18px; }
+.escena { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "entradas" "grafico" "controles"; gap: 12px; }
+.zona-entradas { grid-area: entradas; }
+.escena .marco { grid-area: grafico; margin-top: 0; }
+.controles { grid-area: controles; }
+.controles .fila { margin-top: 6px; gap: 6px; }
+.controles button { font-size: 13px; padding: 6px 12px; }
+.rot-ctl { display: block; font-size: 12px; color: var(--tenue); margin: 12px 0 0; }
+.rot-ctl:first-child { margin-top: 0; }
+.controles button.obj { font-family: Cifra, monospace; font-size: 15px; font-weight: 500; min-width: 3em; }
+.controles button.obj[aria-pressed="false"] { color: var(--tenue); }
+.grupo button.obj[aria-pressed="true"] { background: var(--acento); border-color: var(--acento); color: var(--fondo); }
+@media (min-width: 900px) {
+  .hoja { max-width: 1200px; }
+  .escena {
+    grid-template-columns: minmax(0, 1fr) 360px; column-gap: 20px; row-gap: 14px;
+    grid-template-areas: "grafico controles" "grafico entradas"; grid-template-rows: auto 1fr; align-items: start;
+  }
+  .escena .marco { position: sticky; top: 12px; }
+  .zona-entradas .objeto { padding: 10px 12px 12px; margin-bottom: 10px; }
+  .zona-entradas .objeto input { width: 3.1em; font-size: 15px; padding: 6px 2px; }
+  .zona-entradas .ecuacion, .zona-entradas .terna { font-size: 15px; gap: 5px; margin-top: 8px; }
+  .zona-entradas select { font-size: 13px; padding: 6px 10px; }
+  .zona-entradas .cabeza .nombre { font-size: 20px; }
+  .zona-entradas .quitar { font-size: 13px; padding: 6px 12px; }
+}
+html[data-proy="si"] .controles button { font-size: 15px; padding: 8px 14px; }
 [hidden] { display: none !important; }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
 </style>
@@ -117,26 +143,41 @@ html[data-proy="si"] .forma .v { font-size: 18px; }
     <button id="pantalla" hidden>Pantalla completa</button>
   </div>
 
-  <div id="objetos"></div>
-  <div class="fila"><button id="agregar">Agregar objeto</button></div>
-  <p class="nota">Admite fracciones, como 2/3. Un campo vacío vale cero.</p>
-
-  <div class="marco">
-    <canvas id="grafico" role="img" aria-label="Representación en el espacio de las rectas y planos cargados"></canvas>
+  <div class="escena">
+    <div class="zona-entradas">
+      <div id="objetos"></div>
+      <div class="fila"><button id="agregar">Agregar objeto</button></div>
+      <p class="nota">Admite fracciones, como 2/3. Un campo vacío vale cero.</p>
+    </div>
+    <div class="marco">
+      <canvas id="grafico" role="img" aria-label="Representación en el espacio de las rectas y planos cargados"></canvas>
+    </div>
+    <div class="controles" id="controles">
+      <span class="rot-ctl">Mostrar</span>
+      <div class="fila grupo" id="botones-objetos" role="group" aria-label="Objetos visibles"></div>
+      <div class="fila grupo" role="group" aria-label="Elementos del gráfico">
+        <button data-capa="inter" aria-pressed="true">Intersecciones</button>
+        <button data-capa="ejes" aria-pressed="true">Ejes</button>
+        <button data-capa="caja" aria-pressed="true">Caja y piso</button>
+      </div>
+      <div class="fila">
+        <button id="mostrar-todo">Mostrar todo</button>
+        <button id="ocultar-todo">Ocultar todo</button>
+      </div>
+      <span class="rot-ctl">Vista</span>
+      <div class="fila grupo" id="vistas" role="group">
+        <button data-v="persp" aria-pressed="true">Perspectiva</button>
+        <button data-v="xy" aria-pressed="false">Plano xy</button>
+        <button data-v="xz" aria-pressed="false">Plano xz</button>
+        <button data-v="yz" aria-pressed="false">Plano yz</button>
+      </div>
+      <div class="fila">
+        <button id="alejar">Alejar</button>
+        <button id="acercar">Acercar</button>
+      </div>
+      <p class="nota">Arrastrá el gráfico para girarlo.</p>
+    </div>
   </div>
-  <div class="fila grupo" id="vistas" role="group">
-    <button data-v="persp" aria-pressed="true">Perspectiva</button>
-    <button data-v="xy" aria-pressed="false">Plano xy</button>
-    <button data-v="xz" aria-pressed="false">Plano xz</button>
-    <button data-v="yz" aria-pressed="false">Plano yz</button>
-  </div>
-  <div class="fila">
-    <button id="alejar">Alejar</button>
-    <button id="acercar">Acercar</button>
-    <button id="png">Descargar PNG</button>
-    <button id="jpg">Descargar JPG</button>
-  </div>
-  <p class="nota">Arrastrá el gráfico para girarlo.</p>
 
   <h2>Posiciones relativas</h2>
   <div id="analisis"></div>
@@ -512,6 +553,7 @@ var G3 = (function () {
     { tipo: 'recta', forma: 'vectorial', val: { px: '0', py: '0', pz: '0', vx: '1', vy: '2', vz: '3' } }
   ];
   var datos = [], extras = { puntos: [], rectas: [] };
+  var capas = { inter: true, ejes: true, caja: true };
   var VISTAS = { persp: [-2.25, 0.42], xy: [0, Math.PI / 2], xz: [0, 0], yz: [-Math.PI / 2, 0] };
   var yaw = VISTAS.persp[0], elev = VISTAS.persp[1], L = 6;
   var temaClaro = false, proyeccion = false, escala = 1;
@@ -678,6 +720,21 @@ var G3 = (function () {
       caja.appendChild(sec);
     });
     document.getElementById('agregar').hidden = objetos.length >= MAXOBJ;
+    var bo = document.getElementById('botones-objetos');
+    bo.innerHTML = '';
+    objetos.forEach(function (o, i) {
+      var b = crear('button', 'obj', o.nombre);
+      b.style.setProperty('--acento', 'var(--o' + i + ')');
+      b.setAttribute('aria-pressed', String(o.visible !== false));
+      b.setAttribute('aria-label', 'Mostrar ' + o.nombre);
+      b.addEventListener('click', function () {
+        o.visible = o.visible === false;
+        b.setAttribute('aria-pressed', String(o.visible));
+        datos.forEach(function (c, j) { c.visible = objetos[j].visible !== false; });
+        medirYPintar();
+      });
+      bo.appendChild(b);
+    });
   }
 
   /* ---------- análisis y formas ---------- */
@@ -711,8 +768,8 @@ var G3 = (function () {
         celdas(lec, [['Posición relativa', r.posicion], ['Intersección', inter], ['Ángulo', r.angulo], ['Distancia', r.dist]]);
         bloque.appendChild(lec);
         caja.appendChild(bloque);
-        if (r.dibujo && r.dibujo.punto) extras.puntos.push(r.dibujo.punto);
-        if (r.dibujo && r.dibujo.recta) extras.rectas.push(r.dibujo.recta);
+        if (r.dibujo && r.dibujo.punto) extras.puntos.push({ X: r.dibujo.punto, de: [A.indice, B.indice] });
+        if (r.dibujo && r.dibujo.recta) extras.rectas.push({ r: r.dibujo.recta, de: [A.indice, B.indice] });
       }
     }
 
@@ -724,8 +781,9 @@ var G3 = (function () {
     if (planos.length === 3) {
       var t = g.tresPlanos(planos[0], planos[1], planos[2]);
       celdas(tres, [['Sistema', t.sistema], ['Rangos', t.rangos], ['Posición relativa', t.posicion], ['Intersección', t.inter]]);
-      if (t.dibujo && t.dibujo.punto) extras.puntos.push(t.dibujo.punto);
-      if (t.dibujo && t.dibujo.recta) extras.rectas.push(t.dibujo.recta);
+      var de3 = planos.map(function (c) { return c.indice; });
+      if (t.dibujo && t.dibujo.punto) extras.puntos.push({ X: t.dibujo.punto, de: de3 });
+      if (t.dibujo && t.dibujo.recta) extras.rectas.push({ r: t.dibujo.recta, de: de3 });
     }
   }
 
@@ -841,7 +899,8 @@ var G3 = (function () {
       var x1 = q[0] * cyw - q[1] * syw, y1 = q[0] * syw + q[1] * cyw;
       return [W / 2 + k * x1, H / 2 - k * (y1 * se + q[2] * ce), -y1 * ce + q[2] * se];
     }
-    var planos = datos.filter(function (c) { return !c.error && c.tipo === 'plano'; });
+    var planos = datos.filter(function (c) { return !c.error && c.visible && c.tipo === 'plano'; });
+    function ven(de) { return capas.inter && de.every(function (i) { return datos[i] && datos[i].visible; }); }
     function oculto(q) {
       for (var i = 0; i < planos.length; i++) {
         var pl = planos[i], nD = g.dot(pl.n, D);
@@ -878,6 +937,7 @@ var G3 = (function () {
     }
 
     var paso = pasoLindo(L / 3);
+    if (capas.caja) {
     cx.strokeStyle = p.grilla; cx.lineWidth = 1 * s;
     cx.beginPath();
     for (var m = -Math.floor(L / paso) * paso; m <= L + 1e-9; m += paso) {
@@ -899,14 +959,15 @@ var G3 = (function () {
       });
     }
     cx.stroke();
+    }
 
     var ejes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-    ejes.forEach(function (e) { trazo(g.mul(e, -L), g.mul(e, L), p.eje, 1.5 * s); });
+    if (capas.ejes) ejes.forEach(function (e) { trazo(g.mul(e, -L), g.mul(e, L), p.eje, 1.5 * s); });
 
     var fuera = [];
     var polis = [];
     datos.forEach(function (c) {
-      if (c.error || c.tipo !== 'plano') return;
+      if (c.error || !c.visible || c.tipo !== 'plano') return;
       var poly = poligono(c.n, c.d);
       if (!poly) { fuera.push(c.nombre); return; }
       var pp = poly.map(pr);
@@ -923,14 +984,15 @@ var G3 = (function () {
       cx.strokeStyle = rgba(col, 0.9); cx.lineWidth = 1.5 * s; cx.stroke();
     });
 
-    extras.rectas.forEach(function (r) {
-      var seg = recortar(r.P, r.v);
+    extras.rectas.forEach(function (x) {
+      if (!ven(x.de)) return;
+      var r = x.r, seg = recortar(r.P, r.v);
       if (seg) trazo(seg[0], seg[1], p.inter, 3 * s);
     });
 
     var etiquetas = [];
     datos.forEach(function (c) {
-      if (c.error || c.tipo !== 'recta') return;
+      if (c.error || !c.visible || c.tipo !== 'recta') return;
       var seg = recortar(c.P, c.v);
       if (!seg) { fuera.push(c.nombre); return; }
       trazo(seg[0], seg[1], p.obj[c.indice], 2.8 * s);
@@ -938,7 +1000,7 @@ var G3 = (function () {
       etiquetas.push([c.nombre, q[0] + 12 * s, q[1] - 10 * s, p.obj[c.indice]]);
     });
 
-    ejes.forEach(function (e, i) {
+    if (capas.ejes) ejes.forEach(function (e, i) {
       for (var t = -Math.floor(L / paso) * paso; t <= L + 1e-9; t += paso) {
         if (t < 1e-9) continue;
         var q = pr(g.mul(e, t));
@@ -948,8 +1010,9 @@ var G3 = (function () {
       texto('xyz'[i], qe[0], qe[1], p.texto, '500 ' + (14 * s) + 'px Cifra, monospace');
     });
 
-    extras.puntos.forEach(function (X) {
-      if (!dentro(X)) return;
+    extras.puntos.forEach(function (x) {
+      var X = x.X;
+      if (!ven(x.de) || !dentro(X)) return;
       var q = pr(X), vis = !oculto(X);
       cx.beginPath();
       cx.arc(q[0], q[1], 5.5 * s, 0, Math.PI * 2);
@@ -973,7 +1036,13 @@ var G3 = (function () {
 
   function medirYPintar() {
     var w = lienzo.parentNode.clientWidth - 12;
-    var h = Math.round(Math.max(320, Math.min(620, w * 0.82)) * escala);
+    var h;
+    if (window.innerWidth >= 900) h = Math.max(360, Math.min(window.innerHeight - 40, w * 0.9));
+    else {
+      var ctlH = document.getElementById('controles').offsetHeight;
+      h = Math.max(240, Math.min(w * 0.85, window.innerHeight - ctlH - 40));
+    }
+    h = Math.round(h);
     var dpr = window.devicePixelRatio || 1;
     lienzo.width = Math.round(w * dpr);
     lienzo.height = Math.round(h * dpr);
@@ -986,7 +1055,7 @@ var G3 = (function () {
   function actualizar() {
     datos = objetos.map(function (o, i) {
       var c = construir(o);
-      c.nombre = o.nombre; c.indice = i;
+      c.nombre = o.nombre; c.indice = i; c.visible = o.visible !== false;
       var err = document.getElementById('err-' + i);
       if (err) { err.hidden = !c.error; err.textContent = c.error || ''; }
       return c;
@@ -1069,22 +1138,25 @@ var G3 = (function () {
     armarTarjetas(); actualizar();
   });
 
-  function bajar(mime, ext) {
-    var w = 1200, s = w / (lienzo._w || 620), h = Math.round((lienzo._h || 500) * s);
-    var l2 = document.createElement('canvas');
-    l2.width = w; l2.height = h;
-    pintar(l2.getContext('2d'), w, h, s);
-    l2.toBlob(function (blob) {
-      if (!blob) return;
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url; a.download = 'rectas-y-planos.' + ext;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-    }, mime, 0.94);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-capa]'), function (b) {
+    b.addEventListener('click', function () {
+      var c = b.getAttribute('data-capa');
+      capas[c] = !capas[c];
+      b.setAttribute('aria-pressed', String(capas[c]));
+      medirYPintar();
+    });
+  });
+  function todas(valor) {
+    Object.keys(capas).forEach(function (c) { capas[c] = valor; });
+    objetos.forEach(function (o) { o.visible = valor; });
+    datos.forEach(function (c) { c.visible = valor; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-capa], #botones-objetos button'), function (b) {
+      b.setAttribute('aria-pressed', String(valor));
+    });
+    medirYPintar();
   }
-  document.getElementById('png').addEventListener('click', function () { bajar('image/png', 'png'); });
-  document.getElementById('jpg').addEventListener('click', function () { bajar('image/jpeg', 'jpg'); });
+  document.getElementById('mostrar-todo').addEventListener('click', function () { todas(true); });
+  document.getElementById('ocultar-todo').addEventListener('click', function () { todas(false); });
 
   window.addEventListener('resize', medirYPintar);
   armarTarjetas();
